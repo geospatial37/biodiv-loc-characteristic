@@ -1,0 +1,41 @@
+name: Update elevasi camera trap
+
+on:
+  workflow_dispatch:        # tombol "Run workflow" di tab Actions
+  # Hapus tanda # pada dua baris di bawah untuk menjalankan otomatis tiap hari 01:17 WIB (18:17 UTC).
+  # schedule:
+  #   - cron: '17 18 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-elevasi
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Pasang dependensi
+        run: pip install -r requirements.txt
+
+      - name: Perbarui elevasi di Google Sheets
+        run: python update_elevasi.py
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          SHEET_NAME: type
+          DEM_DIR: Assets               # folder di repo yang berisi file DEM (.tif)
+          KOLOM_ELEVASI: Elevasi_m
+          KOLOM_SUMBER: Sumber_Elevasi
+          FALLBACK_COPERNICUS: 'false'  # 'true' = titik di luar DEM diisi Copernicus GLO-90
+          RINGKASAN_RINCI: 'false'      # 'true' = nama titik dan elevasi tampil di log run
