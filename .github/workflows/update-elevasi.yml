@@ -7,7 +7,7 @@ on:
   #   - cron: '17 18 * * *'
 
 permissions:
-  contents: read
+  contents: write           # diperlukan untuk meng-commit output/elevasi.csv
 
 concurrency:
   group: update-elevasi
@@ -28,14 +28,30 @@ jobs:
       - name: Pasang dependensi
         run: pip install -r requirements.txt
 
-      - name: Perbarui elevasi di Google Sheets
+      - name: Hitung elevasi, lereng, dan tinggi kanopi
         run: python update_elevasi.py
         env:
-          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
-          SHEET_NAME: type
-          DEM_DIR: Assets               # folder di repo yang berisi file DEM (.tif)
-          KOLOM_ELEVASI: Elevasi_m
-          KOLOM_SUMBER: Sumber_Elevasi
-          FALLBACK_COPERNICUS: 'false'  # 'true' = titik di luar DEM diisi Copernicus GLO-90
-          RINGKASAN_RINCI: 'false'      # 'true' = nama titik dan elevasi tampil di log run
+          SHEET_GID: '2116481874'            # angka setelah "gid=" pada URL sheet "type"
+          DEM_FILES: Assets/DEM_*.tif        # file DEM di repo
+          # Tinggi kanopi Meta/WRI CHMv2 (~1,2 m), dibaca langsung dari AWS tanpa diunduh utuh.
+          # Dua tile ini mencakup seluruh area DEM. Untuk memakai file di repo, ganti dengan: Assets/CHM_*.tif
+          KANOPI_FILES: >-
+            https://dataforgood-fb-data.s3.amazonaws.com/forests/v2/global/dinov3_global_chm_v2_ml3/chm/1322333203.tif,
+            https://dataforgood-fb-data.s3.amazonaws.com/forests/v2/global/dinov3_global_chm_v2_ml3/chm/1322333221.tif
+          RADIUS_BUFFER_M: '50'              # radius buffer untuk rata-rata lereng dan kanopi
+          DEM_NOL_KOSONG: 'true'             # piksel DEM bernilai 0 dianggap kosong (di luar area proyek)
+          OUTPUT_CSV: output/elevasi.csv
+          FALLBACK_COPERNICUS: 'false'       # 'true' = elevasi titik di luar DEM diisi Copernicus GLO-90
+
+      - name: Simpan hasil ke repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output/elevasi.csv
+          if git diff --cached --quiet; then
+            echo "Tidak ada perubahan."
+          else
+            git commit -m "Perbarui karakteristik lokasi camera trap"
+            git push
+          fi
