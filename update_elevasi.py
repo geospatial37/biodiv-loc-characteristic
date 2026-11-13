@@ -272,7 +272,7 @@ def ringkasan(titik, dilewati, tujuan, ada_kanopi, radius_m):
 
 # ---------------------------------------------------------------- utama
 def main():
-    sheet_id = env("SHEET_ID", wajib=True)
+    sheet_id = env("SHEET_ID", "1Zkm82R3ct1HY1ov_HL35M9qEJudKPCkf0wGSNGxwdQ4")
     gid = env("SHEET_GID", "0")
     pola_dem = env("DEM_FILES", "Assets/DEM_*.tif")
     pola_kanopi = env("KANOPI_FILES", "Assets/CHM_*.tif")

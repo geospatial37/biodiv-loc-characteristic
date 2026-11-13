@@ -31,7 +31,7 @@ jobs:
       - name: Hitung elevasi, lereng, dan tinggi kanopi
         run: python update_elevasi.py
         env:
-          SHEET_ID: ${{ secrets.SHEET_ID }}
+          SHEET_ID: '1Zkm82R3ct1HY1ov_HL35M9qEJudKPCkf0wGSNGxwdQ4'   # ID spreadsheet "cameratrap db"
           SHEET_GID: '2116481874'            # angka setelah "gid=" pada URL sheet "type"
           DEM_FILES: Assets/DEM_*.tif        # file DEM di repo
           # Tinggi kanopi Meta/WRI CHMv2 (~1,2 m), dibaca langsung dari AWS tanpa diunduh utuh.
