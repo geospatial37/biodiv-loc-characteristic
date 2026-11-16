@@ -60,11 +60,11 @@ jobs:
             git push
           fi
 
-      # Menulis hasil ke sheet "type" lewat web app Apps Script (lihat apps_script/Code.gs).
+      # Menulis hasil ke sheet "type" lewat web app Apps Script (lihat apps_script/KarakteristikLokasi.gs).
       # Tempel URL web app (berakhiran /exec) di bawah. Jika masih kosong, langkah ini dilewati.
       - name: Perbarui Google Sheets
         env:
-          WEBAPP_URL: ''
+          WEBAPP_URL: 'https://script.google.com/macros/s/AKfycbyz2_6--hjqmyoDYoEXROOqqVKC-WcDLQ3oRHK8vEM2uqXFdNkcveqEXOlRdD5PtSgj/exec'
         run: |
           if [ -z "$WEBAPP_URL" ]; then
             echo "::warning::WEBAPP_URL belum diisi; sheet tidak diperbarui."
