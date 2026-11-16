@@ -1,0 +1,19 @@
+Kunci,CameraID,Site,Elevasi_m,Slope_deg,Slope_buffer_deg,Sumber_Elevasi,Kanopi_m,Kanopi_buffer_m,Sumber_Kanopi
+CT01|Sungai Sasi,CT01,Sungai Sasi,134.7,21.2,19.3,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),24.0,22.7,1322333203.tif
+CT03|Rimba Dait Bawah,CT03,Rimba Dait Bawah,344.5,17.9,11.3,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),31.0,24.8,1322333203.tif
+CT05|Bukit Onah,CT05,Bukit Onah,257.0,26.2,24.5,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),23.0,27.4,1322333203.tif
+CT07|Bukit Sebauh,CT07,Bukit Sebauh,362.7,15.7,26.8,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),22.0,21.9,1322333203.tif
+CT07|Sungai Biru Atas,CT07,Sungai Biru Atas,226.5,22.8,22.8,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),22.0,24.1,1322333203.tif
+CT09|Bukit Gentis,CT09,Bukit Gentis,232.3,11.0,13.5,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),14.0,24.7,1322333203.tif
+CT10|Bukit Sebawak Malam,CT10,Bukit Sebawak Malam,633.5,25.7,24.6,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),19.0,18.6,1322333221.tif
+CT13|Rimba Dait,CT13,Rimba Dait,350.1,9.8,9.7,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),30.0,23.5,1322333203.tif
+CT16|Ngayu Biru,CT16,Ngayu Biru,175.6,10.2,13.5,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),36.0,30.9,1322333203.tif
+CT24|Sungai Senggolak,CT24,Sungai Senggolak,138.9,25.5,17.4,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),25.0,19.1,1322333203.tif
+CT25|Air Tungguh,CT25,Air Tungguh,151.1,17.0,11.8,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),23.0,20.2,1322333203.tif
+CT26|Sungai Sengkurak,CT26,Sungai Sengkurak,114.4,9.5,9.4,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),15.0,17.9,1322333203.tif
+CT27|Bukit Serantai,CT27,Bukit Serantai,131.9,6.7,11.5,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),24.0,26.1,1322333203.tif
+CT28|Mabah Sepatung,CT28,Mabah Sepatung,203.7,16.8,16.0,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),19.0,21.7,1322333203.tif
+L1|Ombo Dait 1,L1,Ombo Dait 1,366.1,11.7,12.1,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),44.0,26.6,1322333203.tif
+L2|Ombo Dait 2,L2,Ombo Dait 2,363.9,25.3,16.9,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),15.0,23.5,1322333203.tif
+L3|Meranas,L3,Meranas,266.8,25.9,26.5,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),22.0,29.5,1322333203.tif
+L4|Sekajang,L4,Sekajang,362.7,15.7,26.8,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),22.0,21.9,1322333203.tif
