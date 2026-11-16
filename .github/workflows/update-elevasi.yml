@@ -7,7 +7,7 @@ on:
   #   - cron: '17 18 * * *'
 
 permissions:
-  contents: write           # diperlukan untuk meng-commit output/elevasi.csv
+  contents: read            # hanya membaca repo; hasil dikirim langsung ke Google Sheets
 
 concurrency:
   group: update-elevasi
@@ -28,7 +28,7 @@ jobs:
       - name: Pasang dependensi
         run: pip install -r requirements.txt
 
-      - name: Hitung elevasi, lereng, dan tinggi kanopi
+      - name: Hitung karakteristik lokasi dan kirim ke Google Sheets
         run: python update_elevasi.py
         env:
           SHEET_ID: '1Zkm82R3ct1HY1ov_HL35M9qEJudKPCkf0wGSNGxwdQ4'   # ID spreadsheet "cameratrap db"
@@ -45,32 +45,7 @@ jobs:
           FOREST_BUFFERS_M: '50,250,500'       # radius buffer persen hutan (m)
           FOREST_SEARCH_M: '3000'              # jarak pencarian tepi hutan (m)
           DEM_NOL_KOSONG: 'true'             # piksel DEM bernilai 0 dianggap kosong (di luar area proyek)
-          OUTPUT_CSV: output/elevasi.csv
           FALLBACK_COPERNICUS: 'false'       # 'true' = elevasi titik di luar DEM diisi Copernicus GLO-90
-
-      - name: Simpan hasil ke repo
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add output/elevasi.csv
-          if git diff --cached --quiet; then
-            echo "Tidak ada perubahan."
-          else
-            git commit -m "Perbarui karakteristik lokasi camera trap"
-            git push
-          fi
-
-      # Menulis hasil ke sheet "type" lewat web app Apps Script (lihat apps_script/KarakteristikLokasi.gs).
-      # Tempel URL web app (berakhiran /exec) di bawah. Jika masih kosong, langkah ini dilewati.
-      - name: Perbarui Google Sheets
-        env:
+          # Web app Apps Script yang menulis hasil ke sheet "type" (apps_script/KarakteristikLokasi.gs).
           WEBAPP_URL: 'https://script.google.com/macros/s/AKfycbyz2_6--hjqmyoDYoEXROOqqVKC-WcDLQ3oRHK8vEM2uqXFdNkcveqEXOlRdD5PtSgj/exec'
-        run: |
-          if [ -z "$WEBAPP_URL" ]; then
-            echo "::warning::WEBAPP_URL belum diisi; sheet tidak diperbarui."
-            exit 0
-          fi
-          SHA=$(git rev-parse HEAD)
-          HASIL=$(curl -fsSL --retry 3 --max-time 120 "${WEBAPP_URL}?sha=${SHA}")
-          echo "$HASIL"
-          echo "$HASIL" | grep -q '"ok":true' || { echo "::error::Gagal memperbarui sheet: $HASIL"; exit 1; }
+          SHEET_TOKEN: ${{ secrets.SHEET_TOKEN }}   # secret GitHub; nilainya sama dengan Script property TOKEN
