@@ -1,7 +1,22 @@
+#!/usr/bin/env python3
+"""Hitung elevasi, lereng, tinggi kanopi, dan karakteristik hutan titik camera trap, lalu tulis ke Google Sheets.
 
+Alur:
+  1. Baca sheet koordinat dari Google Sheets yang dibuka untuk umum (tanpa kredensial).
+  2. Dari DEM (Assets/DEM_*.tif): elevasi di titik, lereng di titik, dan rata-rata lereng dalam buffer.
+  3. Dari raster tinggi kanopi (Assets/CHM_*.tif, opsional): tinggi kanopi di titik dan rata-rata dalam buffer.
+  4. Dari raster hutan (Assets/Forest*.tif, opsional): apakah titik di dalam hutan, jarak ke tepi hutan,
+     dan persen hutan dalam beberapa buffer. Piksel bernilai FOREST_VALUES = hutan; piksel lain
+     (termasuk nodata) di dalam raster = non-hutan; di luar raster = tidak diketahui.
+  5. Kirim hasilnya (tanpa koordinat) ke web app Apps Script (apps_script/KarakteristikLokasi.gs),
+     yang menulisnya ke sheet "type". Tidak ada file hasil yang disimpan di repo.
+
+Konfigurasi lewat environment variable (lihat README.md).
+"""
 import csv
 import glob
 import io
+import json
 import math
 import os
 import sys
@@ -265,7 +280,7 @@ def isi_dari_copernicus(titik):
             }, timeout=60)
             r.raise_for_status()
             nilai = r.json()["elevation"]
-        except Exception as e:             
+        except Exception as e:                    # jaringan/API gagal: biarkan kosong
             print(f"::warning::Copernicus (Open-Meteo) gagal: {e}")
             return
         for t, v in zip(grup, nilai):
@@ -274,56 +289,68 @@ def isi_dari_copernicus(titik):
                 t["sumber"] = "Copernicus GLO-90 (Open-Meteo)"
 
 
-def tulis_csv(titik, tujuan, ada_kanopi, radius_hutan=None):
-    """Tulis hasil tanpa koordinat. Kolom Kunci = CameraID|Site, dipakai VLOOKUP di Google Sheets."""
+# ---------------------------------------------------------------- hasil
+def buat_csv(titik, ada_kanopi, radius_hutan=None):
+    """CSV hasil (teks) tanpa koordinat. Kolom Kunci = CameraID|Site, dipakai untuk mencocokkan baris di sheet."""
     def k(v):
         return "" if v is None else v
 
-    tujuan.parent.mkdir(parents=True, exist_ok=True)
-    with open(tujuan, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f, lineterminator="\n")
-        w.writerow(JUDUL_CSV + (JUDUL_KANOPI if ada_kanopi else [])
-                   + (judul_hutan(radius_hutan) if radius_hutan else []))
-        for t in titik:
-            baris = [f"{t['cam']}|{t['site']}", t["cam"], t["site"],
-                     k(t["elevasi"]), k(t["slope"]), k(t["slope_buffer"]), t["sumber"]]
-            if ada_kanopi:
-                baris += [k(t["kanopi"]), k(t["kanopi_buffer"]), t["sumber_kanopi"]]
-            if radius_hutan:
-                baris += ([k(t["hutan"]), k(t["tepi"])] + [k(t["hutan_persen"].get(r)) for r in radius_hutan]
-                          + [t["hutan_catatan"], t["sumber_hutan"]])
-            w.writerow(baris)
+    f = io.StringIO()
+    w = csv.writer(f, lineterminator="\n")
+    w.writerow(JUDUL_CSV + (JUDUL_KANOPI if ada_kanopi else [])
+               + (judul_hutan(radius_hutan) if radius_hutan else []))
+    for t in titik:
+        baris = [f"{t['cam']}|{t['site']}", t["cam"], t["site"],
+                 k(t["elevasi"]), k(t["slope"]), k(t["slope_buffer"]), t["sumber"]]
+        if ada_kanopi:
+            baris += [k(t["kanopi"]), k(t["kanopi_buffer"]), t["sumber_kanopi"]]
+        if radius_hutan:
+            baris += ([k(t["hutan"]), k(t["tepi"])] + [k(t["hutan_persen"].get(r)) for r in radius_hutan]
+                      + [t["hutan_catatan"], t["sumber_hutan"]])
+        w.writerow(baris)
+    return f.getvalue()
 
 
-def ringkasan(titik, dilewati, tujuan, ada_kanopi, radius_m, ada_hutan=False):
+def kirim_ke_sheet(url, token, teks_csv):
+    """Kirim CSV ke web app Apps Script, yang menulisnya ke sheet. Keluar dengan error jika gagal."""
+    isi = json.dumps({"token": token, "csv": teks_csv})
+    try:
+        r = requests.post(url, data=isi.encode("utf-8"), timeout=180,
+                          headers={"Content-Type": "text/plain; charset=utf-8"})
+    except requests.RequestException as e:
+        sys.exit(f"::error::Web app Apps Script tidak bisa dihubungi: {e}")
+    try:
+        hasil = r.json()
+    except ValueError:
+        sys.exit(f"::error::Web app tidak mengembalikan JSON (HTTP {r.status_code}). Periksa URL /exec dan "
+                 f"pengaturan 'Who has access: Anyone'. Awal respons: {r.text[:150]!r}")
+    if not hasil.get("ok"):
+        sys.exit(f"::error::Gagal memperbarui sheet: {hasil.get('error', hasil)}")
+    print(f"Sheet diperbarui: {hasil.get('baris')} baris."
+          + (f" Kolom dilewati (belum ada di CSV): {', '.join(hasil['dilewati'])}." if hasil.get("dilewati") else ""))
+
+
+def laporan(titik, dilewati, ada_kanopi, ada_hutan):
+    """Ringkasan singkat di log (bukan di halaman ringkasan run)."""
+    n = len(titik)
     terisi = sum(t["elevasi"] is not None for t in titik)
-    teks = (f"## Karakteristik lokasi camera trap\n\n"
-            f"- Elevasi dan lereng: {terisi} dari {len(titik)} titik terisi (buffer {radius_m:g} m).\n")
+    print(f"Elevasi dan lereng: {terisi}/{n} titik.")
     if ada_kanopi:
-        kan = sum(t["kanopi_buffer"] is not None for t in titik)
-        teks += f"- Tinggi kanopi: {kan} dari {len(titik)} titik terisi.\n"
-    else:
-        teks += "- Tinggi kanopi: dilewati (belum ada file raster kanopi).\n"
+        print(f"Tinggi kanopi: {sum(t['kanopi_buffer'] is not None for t in titik)}/{n} titik.")
     if ada_hutan:
-        ada = sum(t["hutan"] is not None for t in titik)
-        dalam = sum(t["hutan"] == 1 for t in titik)
-        catat = sum(bool(t["hutan_catatan"]) for t in titik)
-        teks += (f"- Hutan: {ada} dari {len(titik)} titik terisi ({dalam} di dalam hutan); "
-                 f"{catat} titik punya catatan (lihat kolom `Hutan_catatan`).\n")
-    else:
-        teks += "- Hutan: dilewati (belum ada file raster hutan).\n"
-    teks += f"- Hasil: `{tujuan.as_posix()}`."
-    print(teks)
-    berkas = os.environ.get("GITHUB_STEP_SUMMARY")
-    if berkas:
-        with open(berkas, "a", encoding="utf-8") as f:
-            f.write(teks + "\n")
+        print(f"Hutan: {sum(t['hutan'] is not None for t in titik)}/{n} titik "
+              f"({sum(t['hutan'] == 1 for t in titik)} di dalam hutan).")
+        for t in titik:
+            if t["hutan_catatan"]:
+                print(f"Catatan hutan {t['cam']} {t['site']}: {t['hutan_catatan']}")
     if dilewati:
         print(f"::warning::{dilewati} baris dilewati karena koordinatnya kosong atau tidak valid.")
-    if terisi < len(titik):
-        print(f"::warning::{len(titik) - terisi} titik tidak mendapat elevasi "
+    if terisi < n:
+        print(f"::warning::{n - terisi} titik tidak mendapat elevasi "
               "(di luar area berisi data pada file DEM). Periksa koordinatnya di sheet.")
 
+
+# ---------------------------------------------------------------- utama
 def main():
     sheet_id = env("SHEET_ID", "1Zkm82R3ct1HY1ov_HL35M9qEJudKPCkf0wGSNGxwdQ4")
     gid = env("SHEET_GID", "0")
@@ -337,7 +364,9 @@ def main():
     kanopi_maks = float(env("KANOPI_MAKS_M", "100"))
     aktif = ("1", "true", "ya", "yes")
     nol_kosong = env("DEM_NOL_KOSONG", "true").lower() in aktif
-    tujuan = Path(env("OUTPUT_CSV", "output/elevasi.csv"))
+    tujuan = env("OUTPUT_CSV")                 # opsional: simpan juga ke file (mis. untuk pengujian)
+    webapp = env("WEBAPP_URL")
+    token = env("SHEET_TOKEN")
     pakai_cadangan = env("FALLBACK_COPERNICUS", "false").lower() in aktif
 
     titik, dilewati = baca_titik(unduh_sheet(sheet_id, gid))
@@ -381,8 +410,18 @@ def main():
 
     for src in dem + kanopi + hutan:
         src.close()
-    tulis_csv(titik, tujuan, bool(kanopi), radius_hutan if hutan else None)
-    ringkasan(titik, dilewati, tujuan, bool(kanopi), radius_m, bool(hutan))
+    laporan(titik, dilewati, bool(kanopi), bool(hutan))
+    teks_csv = buat_csv(titik, bool(kanopi), radius_hutan if hutan else None)
+    if tujuan:
+        Path(tujuan).parent.mkdir(parents=True, exist_ok=True)
+        Path(tujuan).write_text(teks_csv, encoding="utf-8", newline="")
+        print(f"CSV disimpan ke {tujuan}.")
+    if webapp:
+        if not token:
+            sys.exit("::error::SHEET_TOKEN belum diisi (secret GitHub), padahal WEBAPP_URL terisi.")
+        kirim_ke_sheet(webapp, token, teks_csv)
+    elif not tujuan:
+        sys.exit("::error::WEBAPP_URL maupun OUTPUT_CSV tidak diisi; hasil tidak ke mana-mana.")
 
 
 if __name__ == "__main__":
