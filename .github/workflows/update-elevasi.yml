@@ -48,4 +48,4 @@ jobs:
           FALLBACK_COPERNICUS: 'false'       # 'true' = elevasi titik di luar DEM diisi Copernicus GLO-90
           # Web app Apps Script yang menulis hasil ke sheet "type" (apps_script/KarakteristikLokasi.gs).
           WEBAPP_URL: 'https://script.google.com/macros/s/AKfycbyz2_6--hjqmyoDYoEXROOqqVKC-WcDLQ3oRHK8vEM2uqXFdNkcveqEXOlRdD5PtSgj/exec'
-          SHEET_TOKEN: ${{ secrets.SHEET_TOKEN }}   # secret GitHub; nilainya sama dengan Script property TOKEN
+          SHEET_TOKEN: ${{ secrets.SHEET_TOKEN || secrets.TOKEN }}   # secret GitHub bernama SHEET_TOKEN (atau TOKEN); nilainya sama dengan Script property TOKEN
