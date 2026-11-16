@@ -12,7 +12,7 @@ CT24|Sungai Senggolak,CT24,Sungai Senggolak,138.9,25.5,17.4,DEMNAS (DEM_DEMNASPr
 CT25|Air Tungguh,CT25,Air Tungguh,151.1,17.0,11.8,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),23.0,20.2,1322333203.tif,1,158.0,100.0,97.3,98.3,,Forest.tif
 CT26|Sungai Sengkurak,CT26,Sungai Sengkurak,114.4,9.5,9.4,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),15.0,17.9,1322333203.tif,1,792.5,100.0,100.0,100.0,,Forest.tif
 CT27|Bukit Serantai,CT27,Bukit Serantai,131.9,6.7,11.5,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),24.0,26.1,1322333203.tif,1,1419.6,100.0,100.0,100.0,,Forest.tif
-CT28|Mabah Sepatung,CT28,Mabah Sepatung,203.7,16.8,16.0,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),19.0,21.7,1322333203.tif,0,,0.0,0.0,0.0,tidak_ada_tepi_dalam_3000m;area_pencarian_sebagian_di_luar_raster,Forest.tif
+CT28|Mabah Sepatung,CT28,Mabah Sepatung,203.7,16.8,16.0,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),19.0,21.7,1322333203.tif,1,91.0,100.0,73.9,53.4,,Forest.tif
 L1|Ombo Dait 1,L1,Ombo Dait 1,366.1,11.7,12.1,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),44.0,26.6,1322333203.tif,1,954.2,100.0,100.0,100.0,,Forest.tif
 L2|Ombo Dait 2,L2,Ombo Dait 2,363.9,25.3,16.9,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),15.0,23.5,1322333203.tif,1,1085.3,100.0,100.0,100.0,,Forest.tif
 L3|Meranas,L3,Meranas,266.8,25.9,26.5,DEMNAS (DEM_DEMNASProjectArea_20261113_v1.tif),22.0,29.5,1322333203.tif,1,639.4,100.0,100.0,100.0,,Forest.tif
