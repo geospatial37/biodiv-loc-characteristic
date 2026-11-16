@@ -1,15 +1,4 @@
-#!/usr/bin/env python3
-"""Hitung elevasi, kemiringan lereng, dan tinggi kanopi titik camera trap, lalu simpan sebagai CSV di repo.
 
-Alur:
-  1. Baca sheet koordinat dari Google Sheets yang dibuka untuk umum (tanpa kredensial).
-  2. Dari DEM (Assets/DEM_*.tif): elevasi di titik, lereng di titik, dan rata-rata lereng dalam buffer.
-  3. Dari raster tinggi kanopi (Assets/CHM_*.tif, opsional): tinggi kanopi di titik dan rata-rata dalam buffer.
-  4. Tulis hasilnya ke output/elevasi.csv (tanpa koordinat). Workflow lalu meng-commit file itu,
-     dan Google Sheets membacanya kembali dengan IMPORTDATA.
-
-Konfigurasi lewat environment variable (lihat README.md).
-"""
 import csv
 import glob
 import io
@@ -28,6 +17,11 @@ EKSPOR_CSV = "https://docs.google.com/spreadsheets/d/{id}/export"
 OPEN_METEO = "https://api.open-meteo.com/v1/elevation"
 JUDUL_CSV = ["Kunci", "CameraID", "Site", "Elevasi_m", "Slope_deg", "Slope_buffer_deg", "Sumber_Elevasi"]
 JUDUL_KANOPI = ["Kanopi_m", "Kanopi_buffer_m", "Sumber_Kanopi"]
+
+
+def judul_hutan(radius_list):
+    return (["Hutan_titik", "Tepi_hutan_m"] + [f"Hutan_{r:g}m_persen" for r in radius_list]
+            + ["Hutan_catatan", "Sumber_Hutan"])
 
 
 # ---------------------------------------------------------------- utilitas
@@ -92,7 +86,8 @@ def baca_titik(baris):
             continue
         titik.append({"cam": sel(b, i_cam), "site": sel(b, i_site), "lat": lat, "lon": lon,
                       "elevasi": None, "slope": None, "slope_buffer": None, "sumber": "",
-                      "kanopi": None, "kanopi_buffer": None, "sumber_kanopi": ""})
+                      "kanopi": None, "kanopi_buffer": None, "sumber_kanopi": "",
+                      "hutan": None, "tepi": None, "hutan_persen": {}, "hutan_catatan": "", "sumber_hutan": ""})
     return titik, dilewati
 
 
@@ -106,11 +101,12 @@ def buka_raster(pola):
     return [rasterio.open(b) for b in berkas]
 
 
-def baca_jendela(src, lat, lon, radius_m):
+def baca_jendela(src, lat, lon, radius_m, kosong_nan=True):
     """Potongan raster di sekitar titik.
 
     Mengembalikan (z, jarak, n, dx, dy) atau None jika titik di luar raster:
-      z      array float, NaN untuk piksel kosong/di luar raster; titik berada di z[n, n]
+      z      array float, NaN untuk piksel di luar raster (dan piksel kosong/nodata jika `kosong_nan`);
+             titik berada di z[n, n]
       jarak  jarak pusat tiap piksel ke titik, dalam meter
       dx,dy  ukuran piksel dalam meter
     """
@@ -139,10 +135,11 @@ def baca_jendela(src, lat, lon, radius_m):
     if r1 < r2 and c1 < c2:
         jendela = Window(c1, r1, c2 - c1, r2 - r1)
         data = src.read(1, window=jendela).astype("float64")
-        data[src.read_masks(1, window=jendela) == 0] = np.nan   # mask band (mis. awan pada CHMv2)
-        if src.nodata is not None:
-            data[data == src.nodata] = np.nan
-        data[data < -1e4] = np.nan                 # penanda kosong yang tidak tercatat di metadata
+        if kosong_nan:
+            data[src.read_masks(1, window=jendela) == 0] = np.nan   # mask band (mis. awan pada CHMv2)
+            if src.nodata is not None:
+                data[data == src.nodata] = np.nan
+            data[data < -1e4] = np.nan             # penanda kosong yang tidak tercatat di metadata
         z[r1 - r0:r2 - r0, c1 - c0:c2 - c0] = data
     px, py = src.xy(baris, kolom)                  # pusat piksel yang memuat titik
     timur = ((np.arange(sisi) - n) * rx + (px - x)) * (dx / rx)
@@ -209,6 +206,53 @@ def isi_kanopi(titik, sumber, radius_m, maks):
             break
 
 
+def isi_hutan(titik, sumber, nilai_hutan, radius_list, cari_m):
+    """Status hutan di titik, jarak ke tepi hutan, dan persen hutan dalam tiap buffer.
+
+    Piksel bernilai salah satu `nilai_hutan` = hutan; piksel lain di dalam raster (termasuk nodata)
+    = non-hutan; di luar raster = tidak diketahui. Tepi hutan = piksel kelas berlawanan terdekat
+    (di dalam hutan: non-hutan terdekat; di luar hutan: hutan terdekat), dicari sejauh `cari_m`.
+    Jarak diukur ke pusat piksel itu, dikurangi setengah piksel (batas kelas ada di antara piksel).
+    Hasil ditandai di `hutan_catatan` bila bagian yang tidak diketahui (di luar raster) berada dalam
+    radius yang dipakai, karena tepi yang lebih dekat bisa saja ada di luar raster.
+    """
+    radius_baca = max([cari_m] + list(radius_list))
+    for t in titik:
+        for src in sumber:
+            hasil = baca_jendela(src, t["lat"], t["lon"], radius_baca, kosong_nan=False)
+            if hasil is None:
+                continue
+            z, jarak, n, dx, dy = hasil
+            diketahui = ~np.isnan(z)
+            hutan = diketahui & np.isin(z, nilai_hutan)
+            bukan = diketahui & ~hutan
+            di_hutan = bool(hutan[n, n])
+            catatan = []
+
+            lawan = (bukan if di_hutan else hutan) & (jarak <= cari_m)
+            if lawan.any():
+                d = float(jarak[lawan].min())
+                t["tepi"] = round(max(d - 0.5 * (dx + dy) / 2, 0.0), 1)
+                if (~diketahui & (jarak <= d)).any():
+                    catatan.append("tepi_mungkin_lebih_dekat_di_luar_raster")
+            else:
+                catatan.append(f"tidak_ada_tepi_dalam_{cari_m:g}m")
+                if (~diketahui & (jarak <= cari_m)).any():
+                    catatan.append("area_pencarian_sebagian_di_luar_raster")
+
+            for r in radius_list:
+                cakram = jarak <= r
+                tahu = cakram & diketahui
+                if tahu.any():
+                    t["hutan_persen"][r] = round(100.0 * float(hutan[tahu].sum()) / float(tahu.sum()), 1)
+                if tahu.sum() < cakram.sum():
+                    catatan.append(f"buffer_{r:g}m_terpotong")
+            t["hutan"] = int(di_hutan)
+            t["hutan_catatan"] = ";".join(catatan)
+            t["sumber_hutan"] = Path(src.name).name
+            break
+
+
 def isi_dari_copernicus(titik):
     """Isi titik yang masih kosong dari Copernicus GLO-90 (API Open-Meteo, maks. 100 titik/permintaan)."""
     kosong = [t for t in titik if t["elevasi"] is None]
@@ -221,7 +265,7 @@ def isi_dari_copernicus(titik):
             }, timeout=60)
             r.raise_for_status()
             nilai = r.json()["elevation"]
-        except Exception as e:                    # jaringan/API gagal: biarkan kosong
+        except Exception as e:             
             print(f"::warning::Copernicus (Open-Meteo) gagal: {e}")
             return
         for t, v in zip(grup, nilai):
@@ -230,8 +274,7 @@ def isi_dari_copernicus(titik):
                 t["sumber"] = "Copernicus GLO-90 (Open-Meteo)"
 
 
-# ---------------------------------------------------------------- tulis hasil
-def tulis_csv(titik, tujuan, ada_kanopi):
+def tulis_csv(titik, tujuan, ada_kanopi, radius_hutan=None):
     """Tulis hasil tanpa koordinat. Kolom Kunci = CameraID|Site, dipakai VLOOKUP di Google Sheets."""
     def k(v):
         return "" if v is None else v
@@ -239,16 +282,20 @@ def tulis_csv(titik, tujuan, ada_kanopi):
     tujuan.parent.mkdir(parents=True, exist_ok=True)
     with open(tujuan, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f, lineterminator="\n")
-        w.writerow(JUDUL_CSV + (JUDUL_KANOPI if ada_kanopi else []))
+        w.writerow(JUDUL_CSV + (JUDUL_KANOPI if ada_kanopi else [])
+                   + (judul_hutan(radius_hutan) if radius_hutan else []))
         for t in titik:
             baris = [f"{t['cam']}|{t['site']}", t["cam"], t["site"],
                      k(t["elevasi"]), k(t["slope"]), k(t["slope_buffer"]), t["sumber"]]
             if ada_kanopi:
                 baris += [k(t["kanopi"]), k(t["kanopi_buffer"]), t["sumber_kanopi"]]
+            if radius_hutan:
+                baris += ([k(t["hutan"]), k(t["tepi"])] + [k(t["hutan_persen"].get(r)) for r in radius_hutan]
+                          + [t["hutan_catatan"], t["sumber_hutan"]])
             w.writerow(baris)
 
 
-def ringkasan(titik, dilewati, tujuan, ada_kanopi, radius_m):
+def ringkasan(titik, dilewati, tujuan, ada_kanopi, radius_m, ada_hutan=False):
     terisi = sum(t["elevasi"] is not None for t in titik)
     teks = (f"## Karakteristik lokasi camera trap\n\n"
             f"- Elevasi dan lereng: {terisi} dari {len(titik)} titik terisi (buffer {radius_m:g} m).\n")
@@ -257,6 +304,14 @@ def ringkasan(titik, dilewati, tujuan, ada_kanopi, radius_m):
         teks += f"- Tinggi kanopi: {kan} dari {len(titik)} titik terisi.\n"
     else:
         teks += "- Tinggi kanopi: dilewati (belum ada file raster kanopi).\n"
+    if ada_hutan:
+        ada = sum(t["hutan"] is not None for t in titik)
+        dalam = sum(t["hutan"] == 1 for t in titik)
+        catat = sum(bool(t["hutan_catatan"]) for t in titik)
+        teks += (f"- Hutan: {ada} dari {len(titik)} titik terisi ({dalam} di dalam hutan); "
+                 f"{catat} titik punya catatan (lihat kolom `Hutan_catatan`).\n")
+    else:
+        teks += "- Hutan: dilewati (belum ada file raster hutan).\n"
     teks += f"- Hasil: `{tujuan.as_posix()}`."
     print(teks)
     berkas = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -269,13 +324,15 @@ def ringkasan(titik, dilewati, tujuan, ada_kanopi, radius_m):
         print(f"::warning::{len(titik) - terisi} titik tidak mendapat elevasi "
               "(di luar area berisi data pada file DEM). Periksa koordinatnya di sheet.")
 
-
-# ---------------------------------------------------------------- utama
 def main():
     sheet_id = env("SHEET_ID", "1Zkm82R3ct1HY1ov_HL35M9qEJudKPCkf0wGSNGxwdQ4")
     gid = env("SHEET_GID", "0")
     pola_dem = env("DEM_FILES", "Assets/DEM_*.tif")
     pola_kanopi = env("KANOPI_FILES", "Assets/CHM_*.tif")
+    pola_hutan = env("FOREST_FILES", "Assets/Forest*.tif")
+    nilai_hutan = [float(v) for v in env("FOREST_VALUES", "1").split(",") if v.strip()]
+    radius_hutan = [float(v) for v in env("FOREST_BUFFERS_M", "50,250,500").split(",") if v.strip()]
+    cari_hutan = float(env("FOREST_SEARCH_M", "3000"))
     radius_m = float(env("RADIUS_BUFFER_M", "50"))
     kanopi_maks = float(env("KANOPI_MAKS_M", "100"))
     aktif = ("1", "true", "ya", "yes")
@@ -315,10 +372,17 @@ def main():
     if not kanopi:
         print(f"Tidak ada file kanopi untuk '{pola_kanopi}'; kolom kanopi dilewati.")
 
-    for src in dem + kanopi:
+    hutan = buka_raster(pola_hutan)
+    if hutan:
+        print("File hutan:", ", ".join(Path(d.name).name for d in hutan))
+        isi_hutan(titik, hutan, nilai_hutan, radius_hutan, cari_hutan)
+    else:
+        print(f"Tidak ada file hutan untuk '{pola_hutan}'; kolom hutan dilewati.")
+
+    for src in dem + kanopi + hutan:
         src.close()
-    tulis_csv(titik, tujuan, bool(kanopi))
-    ringkasan(titik, dilewati, tujuan, bool(kanopi), radius_m)
+    tulis_csv(titik, tujuan, bool(kanopi), radius_hutan if hutan else None)
+    ringkasan(titik, dilewati, tujuan, bool(kanopi), radius_m, bool(hutan))
 
 
 if __name__ == "__main__":
