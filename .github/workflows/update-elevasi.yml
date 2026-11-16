@@ -40,6 +40,10 @@ jobs:
             https://dataforgood-fb-data.s3.amazonaws.com/forests/v2/global/dinov3_global_chm_v2_ml3/chm/1322333203.tif,
             https://dataforgood-fb-data.s3.amazonaws.com/forests/v2/global/dinov3_global_chm_v2_ml3/chm/1322333221.tif
           RADIUS_BUFFER_M: '50'              # radius buffer untuk rata-rata lereng dan kanopi
+          FOREST_FILES: 'Assets/Forest*.tif'   # raster hutan (nilai 1 = hutan, nodata = non-hutan)
+          FOREST_VALUES: '1'                   # nilai piksel yang berarti hutan
+          FOREST_BUFFERS_M: '50,250,500'       # radius buffer persen hutan (m)
+          FOREST_SEARCH_M: '3000'              # jarak pencarian tepi hutan (m)
           DEM_NOL_KOSONG: 'true'             # piksel DEM bernilai 0 dianggap kosong (di luar area proyek)
           OUTPUT_CSV: output/elevasi.csv
           FALLBACK_COPERNICUS: 'false'       # 'true' = elevasi titik di luar DEM diisi Copernicus GLO-90
@@ -55,3 +59,18 @@ jobs:
             git commit -m "Perbarui karakteristik lokasi camera trap"
             git push
           fi
+
+      # Menulis hasil ke sheet "type" lewat web app Apps Script (lihat apps_script/Code.gs).
+      # Tempel URL web app (berakhiran /exec) di bawah. Jika masih kosong, langkah ini dilewati.
+      - name: Perbarui Google Sheets
+        env:
+          WEBAPP_URL: ''
+        run: |
+          if [ -z "$WEBAPP_URL" ]; then
+            echo "::warning::WEBAPP_URL belum diisi; sheet tidak diperbarui."
+            exit 0
+          fi
+          SHA=$(git rev-parse HEAD)
+          HASIL=$(curl -fsSL --retry 3 --max-time 120 "${WEBAPP_URL}?sha=${SHA}")
+          echo "$HASIL"
+          echo "$HASIL" | grep -q '"ok":true' || { echo "::error::Gagal memperbarui sheet: $HASIL"; exit 1; }
